@@ -85,7 +85,8 @@
       justify-content: flex-end;
     }
 
-    .row.assistant {
+    .row.assistant,
+    .row.status {
       justify-content: flex-start;
     }
 
@@ -106,6 +107,28 @@
 
     .assistant .bubble {
       background: #fff;
+    }
+
+    .status .bubble {
+      background: #f4f6f8;
+      color: #444;
+      font-style: italic;
+    }
+
+    .thinking-dots::after {
+      content: "";
+      display: inline-block;
+      width: 1.2em;
+      text-align: left;
+      animation: dots 1.2s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+      0%   { content: ""; }
+      25%  { content: "."; }
+      50%  { content: ".."; }
+      75%  { content: "..."; }
+      100% { content: ""; }
     }
 
     .chat-footer {
@@ -149,8 +172,6 @@
 
   <script>
   (function () {
-
-    // ✅ IMPORTANT: use relative path (this fixes cross-project issues)
     const API_URL = "/api/community-helper";
 
     const root = document.getElementById("hoa-chat");
@@ -186,6 +207,11 @@
     const resetBtn = document.getElementById("resetBtn");
 
     let history = [];
+    let thinkingTimer = null;
+
+    function scrollToBottom() {
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
 
     function addMessage(role, text) {
       const row = document.createElement("div");
@@ -197,7 +223,42 @@
 
       row.appendChild(bubble);
       chatBody.appendChild(row);
-      chatBody.scrollTop = chatBody.scrollHeight;
+      scrollToBottom();
+
+      return { row, bubble };
+    }
+
+    function showThinking() {
+      const row = document.createElement("div");
+      row.className = "row status";
+      row.id = "thinkingRow";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+
+      const start = Date.now();
+
+      function render() {
+        const secs = Math.floor((Date.now() - start) / 1000);
+        bubble.innerHTML = `<span class="thinking-dots">Thinking</span> ${secs}s`;
+        scrollToBottom();
+      }
+
+      render();
+      thinkingTimer = setInterval(render, 1000);
+
+      row.appendChild(bubble);
+      chatBody.appendChild(row);
+      scrollToBottom();
+    }
+
+    function hideThinking() {
+      if (thinkingTimer) {
+        clearInterval(thinkingTimer);
+        thinkingTimer = null;
+      }
+      const row = document.getElementById("thinkingRow");
+      if (row) row.remove();
     }
 
     async function send() {
@@ -209,6 +270,9 @@
 
       chatInput.value = "";
       sendBtn.disabled = true;
+      chatInput.disabled = true;
+
+      showThinking();
 
       try {
         const resp = await fetch(API_URL, {
@@ -223,6 +287,8 @@
           throw new Error(data?.error || "Request failed");
         }
 
+        hideThinking();
+
         const reply =
           data?.reply ||
           "Sorry, I couldn’t generate a response from the available documents.";
@@ -231,6 +297,7 @@
         history.push({ role: "assistant", content: reply });
 
       } catch (e) {
+        hideThinking();
         addMessage(
           "assistant",
           "The Community Helper is currently unavailable. Please try again later."
@@ -238,6 +305,7 @@
         console.error(e);
       } finally {
         sendBtn.disabled = false;
+        chatInput.disabled = false;
         chatInput.focus();
       }
     }
@@ -252,6 +320,7 @@
     });
 
     resetBtn.addEventListener("click", () => {
+      hideThinking();
       history = [];
       chatBody.innerHTML = "";
       addMessage(
@@ -261,7 +330,6 @@
     });
 
     resetBtn.click();
-
   })();
   </script>
 </body>
