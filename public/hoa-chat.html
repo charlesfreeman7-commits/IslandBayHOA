@@ -1,1 +1,237 @@
-1
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inlets at Riverdale — Community Helper</title>
+
+  <style>
+    /* Page background (slightly darker) */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #c9d3e0; /* slightly darker than white */
+    }
+
+    /* Chat root */
+    #hoa-chat * { box-sizing: border-box; font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+
+.chat-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+  height: 100%;
+}
+
+    .chat-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(0,0,0,.06);
+}
+
+    .chat-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(0,0,0,.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: #fff;
+    }
+
+    .chat-title { font-size: 16px; font-weight: 650; }
+    .chat-sub { font-size: 12px; opacity: .75; margin-top: 2px; }
+
+    .chat-actions button{
+      border: 1px solid rgba(0,0,0,.14);
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .chat-actions button:hover { background: rgba(0,0,0,.03); }
+
+    .hint {
+      padding: 10px 16px;
+      font-size: 12px;
+      opacity: .75;
+      border-bottom: 1px solid rgba(0,0,0,.06);
+      background: #fff;
+    }
+
+    /* ✅ Dialog response area shortened by ~2/3 */
+ .chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  background: linear-gradient(#f7f8fa, #ffffff);
+}
+
+    .row { display: flex; margin: 10px 0; }
+    .row.user { justify-content: flex-end; }
+    .row.assistant { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 85%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.10);
+      line-height: 1.35;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .user .bubble { background: #0b5fff12; }
+    .assistant .bubble { background: #fff; }
+
+    .chat-footer {
+      border-top: 1px solid rgba(0,0,0,.08);
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      background: #fff;
+    }
+
+    /* Optional: slightly shorter input height */
+    .chat-footer textarea{
+      flex: 1;
+      resize: none;
+      height: 38px;                 /* was 44px */
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,.18);
+      outline: none;
+      font-size: 14px;
+    }
+
+    .chat-footer button{
+      width: 92px;
+      border: 0;
+      border-radius: 12px;
+      background: #0b5fff;
+      color: #fff;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .chat-footer button:disabled{ opacity: .55; cursor: not-allowed; }
+  </style>
+</head>
+
+<body>
+  <div id="hoa-chat">Loading Community Helper…</div>
+
+  <script>
+  (function () {
+    // ✅ Your working Vercel API endpoint:
+    const API_URL = "https://community-helper-api-nftx.vercel.app/api/community-helper";
+
+    const root = document.getElementById("hoa-chat");
+    root.innerHTML = `
+      <div class="chat-wrap">
+        <div class="chat-card">
+          <div class="chat-header">
+            <div>
+              <div class="chat-title">Inlets at Riverdale — Community Helper</div>
+              <div class="chat-sub">Answers are based on uploaded HOA documents (and saved GoEnumerate PDFs).</div>
+            </div>
+            <div class="chat-actions">
+              <button id="resetBtn" type="button">Reset</button>
+            </div>
+          </div>
+
+          <div class="hint">Be as general or specific as you like. Ask about ARC/ARB rules, submitting requests and applications, meetings/minutes, budgets, dues, maintenance standards, or 
+          common areas.</div>
+
+          <div id="chatBody" class="chat-body" aria-live="polite"></div>
+
+          <div class="chat-footer">
+            <textarea id="chatInput" placeholder="Type your question…"></textarea>
+            <button id="sendBtn" type="button">Send</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const chatBody = document.getElementById("chatBody");
+    const chatInput = document.getElementById("chatInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    // Keeps short history in the browser so the assistant has context
+    let history = [];
+
+    function addMessage(role, text) {
+      const row = document.createElement("div");
+      row.className = `row ${role}`;
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = text;
+      row.appendChild(bubble);
+      chatBody.appendChild(row);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    async function send() {
+      const message = (chatInput.value || "").trim();
+      if (!message) return;
+
+      addMessage("user", message);
+      history.push({ role: "user", content: message });
+
+      chatInput.value = "";
+      sendBtn.disabled = true;
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, history })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || "Request failed");
+
+        const reply = data?.reply || "Sorry, I couldn't generate a response.";
+        addMessage("assistant", reply);
+        history.push({ role: "assistant", content: reply });
+
+      } catch (e) {
+        addMessage("assistant", "The Community Helper is currently unavaiable. Please try again or come back soon.");
+        console.error(e);
+      } finally {
+        sendBtn.disabled = false;
+        chatInput.focus();
+      }
+    }
+
+    sendBtn.addEventListener("click", send);
+
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    resetBtn.addEventListener("click", () => {
+      history = [];
+      chatBody.innerHTML = "";
+      addMessage(
+        "assistant",
+        "Ask the Helper any question you have about Inlets at Riverdale HOA and the Community Helper will guide you there"
+      );
+    });
+
+    // Initial greeting
+    resetBtn.click();
+  })();
+  </script>
+</body>
+</html>
+
